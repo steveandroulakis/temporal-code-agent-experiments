@@ -169,6 +169,7 @@ uv run starter.py "CodeAgent"
 **Expected:** the starter prints `Result: Hello, CodeAgent!` and exits with code 0.
 
 ### 4.4 Validate Execution with Temporal CLI
+**NOTE:** You can ALWAYS validate your executions and behavior of workflows by using these commands.
 
 After the starter completes, verify the workflow execution history using the Temporal CLI.
 
