@@ -85,8 +85,7 @@ mkdir _your_app_name_here_ # (or choose an appropriate name)
 
 ```bash
 uv venv
-uv add temporalio
-uv add --dev pytest ruff mypy
+uv add temporalio --dev ruff mypy pytest
 uv pip list
 ```
 
@@ -150,6 +149,8 @@ temporal operator namespace describe default >/dev/null 2>&1 || temporal server 
 ### 4.2 Start the Worker
 
 ```bash
+# ENSURE THE TEMPORAL SERVICE IS RUNNING FIRST
+# ENSURE NO WORKER IS CURRENTLY RUNNING ALREADY, IF SO: KILL THE OLD ONE
 cd _your_app_name_here_ # or your app name
 uv run worker.py > worker.log 2>&1 &
 WORKER_PID=$!; echo $WORKER_PID > worker.pid
@@ -487,9 +488,11 @@ PY
 * **CI:** use `uv sync --frozen` for reproducible installs; cache UV downloads.
 * **Unclear how to use SDK features or best practices** check out and examine https://github.com/temporalio/samples-python.git
 * **You want to intentionally fail the workflow (e.g. a business specific exception)**: Raise a Temporal failure, typically ApplicationError. Any exception that is an instance of temporalio.exceptions.FailureError (e.g., ApplicationError) fails the Workflow Execution immediately. Non-Temporal exceptions (e.g. unexpected bugs) suspend instead of failing. Inside your workflow code: `raise ApplicationError("Customer lives outside the service area")`
-* **Workflow Hangs:** check `worker.log`; confirm PID is alive and polling. List workflows using the Temporal CLI to be sure it's still running, and get the event history (`temporal workflow show...`) to see what may be going wrong.
-NOTE: By default, a non-Temporal exception in a Python Workflow (e.g. a bug) fails the “workflow task” and suspends the Workflow in a retrying state. It keeps retrying until you deploy a code fix; it does not mark the Workflow Execution as failed. This behavior is intended to let you fix bad code (e.g., NPE, type errors) without losing in-flight workflows (SDK Python README – Exceptions). Identify and fix the offending code, then redeploy/restart the Worker; the Workflow will resume from its last progress point once the task is retried with the corrected code.
-
+* **Workflow Hangs:**
+- REASON 1 (worker isn't running): check `worker.log`; confirm PID is alive and polling. List workflows using the Temporal CLI to be sure it's still running.
+- REASON 2 (workflow task failed due to workflow code bug): 
+NOTE: By default, a non-Temporal exception in a Python Workflow (e.g. a bug) fails the “workflow task” and suspends the Workflow in a retrying state. It keeps retrying until you deploy a code fix; it does not mark the Workflow Execution as failed. You will see the exception in the worker. You can `temporal workflow show...` to see the progress of the workflow so far. This workflow task failed behavior is intended to let you fix bad code (e.g., NPE, type errors) without losing in-flight workflows (SDK Python README – Exceptions). Identify and fix the offending code, then redeploy/restart the Worker; the Workflow will resume from its last progress point once the task is retried with the corrected code.
+- REASON 3 (workflow waiting for something): await workflow.wait_condition will pause until the condition(s) are met. Workflows can pause forever waiting for e.g. a signal or some other input. Similarly, workflow timers like await asyncio.sleep allow a workflow to wait until the timer fires. This 'hung' workflow might not be an issue per se, but part of the happy-path business process.
 ---
 
 ## 9) Success Checklist (agent must confirm)
