@@ -15,7 +15,7 @@
 ## 1) Repository / File Layout (required)
 
 ```
-<your_app_name_here>/ (or choose an appropriate name)
+_your_app_name_here_/ (or choose an appropriate name)
   shared.py          # dataclasses and shared types
   activities.py      # activity defs only
   workflow.py        # workflow defs only
@@ -24,7 +24,7 @@
 AGENTS.md            # this file
 ```
 
-> **Imports:** Use relative imports inside `<your_app_name_here>` (e.g., `from activities import compose_greeting`). This keeps things executable via `uv run` without extra PYTHONPATH setup.
+> **Imports:** Use relative imports inside `_your_app_name_here_` (e.g., `from activities import compose_greeting`). This keeps things executable via `uv run` without extra PYTHONPATH setup.
 
 ---
 
@@ -51,18 +51,22 @@ uv python list
 
 ### 2.2 Temporal CLI + Dev Server
 
+Check if available.
 ```bash
 temporal --version
 ```
 
-If missing, install via your OS package manager or from Temporal downloads.
+If not installed:
+- **Mac**: `brew install temporal`
+- **Windows amd64**: https://temporal.download/cli/archive/latest?platform=windows&arch=amd64
+- **Windows arm64**: https://temporal.download/cli/archive/latest?platform=windows&arch=arm64
+- **Linux amd64**: https://temporal.download/cli/archive/latest?platform=linux&arch=amd64
+- **Linux arm64**: https://temporal.download/cli/archive/latest?platform=linux&arch=arm64
 
-**Start/verify dev server:**
+**Start/verify dev server is running:**
 
 ```bash
-curl -f http://localhost:7233 > /dev/null 2>&1 && echo "Server running" || echo "Server not running"
-# If not running:
-temporal server start-dev
+temporal operator namespace describe default >/dev/null 2>&1 || temporal server start-dev &
 ```
 
 > Keep this running in a separate terminal while developing.
@@ -72,9 +76,9 @@ temporal server start-dev
 ## 3) Project Setup (new projects)
 
 ```bash
-uv init temporal-sample-app
-cd temporal-sample-app
-mkdir <your_app_name_here> # (or choose an appropriate name)
+uv init _your_app_name_here_
+cd _your_app_name_here_
+mkdir _your_app_name_here_ # (or choose an appropriate name)
 ```
 
 **Dependencies**
@@ -86,11 +90,30 @@ uv add --dev pytest ruff mypy
 uv pip list
 ```
 
-**Recommended `pyproject.toml` bits**
+### Setup Virtual Environment and Dependencies
+```bash
+# Create local virtual environment (recommended)
+uv venv
+
+# Activate environment (optional - uv run handles this automatically)
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate     # Windows
+
+# Install core Temporal dependencies
+uv add temporalio
+
+# Add development dependencies
+uv add --dev pytest ruff mypy
+
+# Verify installation
+uv pip list
+```
+
+**Recommended `pyproject.toml` setup**
 
 ```toml
 [project]
-name = "temporal-sample-app"
+name = "_your_app_name_here_"
 version = "0.1.0"
 description = "Temporal workflow sample application"
 readme = "README.md"
@@ -112,8 +135,6 @@ warn_return_any = true
 warn_unused_configs = true
 ```
 
-> **PEP 723** (optional): you may use inline `# /// script` blocks in `worker.py`/`starter.py` with `temporalio>=1.7.0` to make files directly runnable via `uv run`.
-
 ---
 
 ## 4) End‑to‑End Execution (MANDATORY)
@@ -129,7 +150,7 @@ temporal operator namespace describe default >/dev/null 2>&1 || temporal server 
 ### 4.2 Start the Worker
 
 ```bash
-cd <your_app_name_here> # or your app name
+cd _your_app_name_here_ # or your app name
 uv run worker.py > worker.log 2>&1 &
 WORKER_PID=$!; echo $WORKER_PID > worker.pid
 sleep 3
@@ -207,7 +228,7 @@ rm -f worker.pid
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-cd <your_app_name_here> # or your app name
+cd _your_app_name_here_ # or your app name
 
 if ! temporal operator namespace describe default >/dev/null 2>&1; then
   echo "Starting Temporal dev server..."
@@ -461,6 +482,7 @@ PY
 * **Hangs:** add timeouts; check `worker.log`; confirm PID is alive and polling.
 * **Dependency woes:** `uv pip check`, `uv sync --reinstall`, `uv lock --upgrade`.
 * **CI:** use `uv sync --frozen` for reproducible installs; cache UV downloads.
+* **Unclear how to use SDK features or best practices** check out https://github.com/temporalio/samples-python.git and examine
 
 ---
 
