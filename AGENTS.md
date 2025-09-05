@@ -15,7 +15,7 @@
 ## 1) Repository / File Layout (required)
 
 ```
-sample_application/ (or choose an appropriate name)
+<your_app_name_here>/ (or choose an appropriate name)
   shared.py          # dataclasses and shared types
   activities.py      # activity defs only
   workflow.py        # workflow defs only
@@ -24,7 +24,7 @@ sample_application/ (or choose an appropriate name)
 AGENTS.md            # this file
 ```
 
-> **Imports:** Use relative imports inside `sample_application` (e.g., `from activities import compose_greeting`). This keeps things executable via `uv run` without extra PYTHONPATH setup.
+> **Imports:** Use relative imports inside `<your_app_name_here>` (e.g., `from activities import compose_greeting`). This keeps things executable via `uv run` without extra PYTHONPATH setup.
 
 ---
 
@@ -74,7 +74,7 @@ temporal server start-dev
 ```bash
 uv init temporal-sample-app
 cd temporal-sample-app
-mkdir sample_application # (or choose an appropriate name)
+mkdir <your_app_name_here> # (or choose an appropriate name)
 ```
 
 **Dependencies**
@@ -129,7 +129,7 @@ curl -f http://localhost:7233 > /dev/null 2>&1 || temporal server start-dev &
 ### 4.2 Start the Worker
 
 ```bash
-cd sample_application # or your app name
+cd <your_app_name_here> # or your app name
 uv run worker.py > worker.log 2>&1 &
 WORKER_PID=$!; echo $WORKER_PID > worker.pid
 sleep 3
@@ -186,7 +186,7 @@ rm -f worker.pid
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-cd sample_application # or your app name
+cd <your_app_name_here> # or your app name
 
 if ! curl -fsS http://localhost:7233 >/dev/null; then
   echo "Starting Temporal dev server..."
