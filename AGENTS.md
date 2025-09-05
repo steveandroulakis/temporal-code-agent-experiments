@@ -159,7 +159,7 @@ ps -p $WORKER_PID > /dev/null || { echo "ERROR: Worker failed to start"; exit 1;
 
 > The worker must log a ready message (e.g., “Worker started … polling …”). Check `worker.log` if unsure.
 
-### 4.3 Run the Workflow Starter (with timeout)
+### 4.3 Run the Workflow Starter (note: workflows may take many seconds to run, or may wait for input e.g. signals, or hang due to bugs)
 
 ```bash
 # Example invocation; customize argument as needed
@@ -211,7 +211,10 @@ To make signaling testable, add a signal to your workflow (see §6). Once added,
 
 Then **query** or run another execution to verify the changed behavior (see §6 for a query example).
 
-### 4.6 Cleanly Stop the Worker
+### 4.6 Gather results
+You should collect the results of your executions ready to give them to me. So I know what you ran succeeded.
+
+### 4.7 Cleanly Stop the Worker
 
 ```bash
 kill $(cat worker.pid)
