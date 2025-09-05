@@ -6,7 +6,7 @@
 
 ## 0) Golden Rules (Do Not Skip)
 
-* ✅ **You must run the app end‑to‑end**: start the Temporal dev server → start `worker.py` → run `starter.py` → (if applicable) send a **signal** → verify results → cleanly stop the worker.
+* ✅ **You must run the app end‑to‑end, potentially multiple times to cover multiple uses and scenarios**: start the Temporal dev server → start `worker.py` → run `starter.py` → (if applicable) send a **signal** → verify results → cleanly stop the worker.
 * ✅ Prefer **`uv run`** for execution and **PID files** for lifecycle control.
 * ✅ Fail fast: use timeouts and non‑zero exit codes if anything can’t connect or errors.
 
@@ -123,7 +123,7 @@ warn_unused_configs = true
 ### 4.1 Start/ensure Temporal dev server is running
 
 ```bash
-curl -f http://localhost:7233 > /dev/null 2>&1 || temporal server start-dev &
+temporal operator namespace describe default >/dev/null 2>&1 || temporal server start-dev &
 ```
 
 ### 4.2 Start the Worker
@@ -147,7 +147,28 @@ uv run starter.py "CodeAgent"
 
 **Expected:** the starter prints `Result: Hello, CodeAgent!` and exits with code 0.
 
-### 4.4 (Optional but Recommended) Send a Signal, Then Verify
+### 4.4 Validate Execution with Temporal CLI
+
+After the starter completes, verify the workflow execution history using the Temporal CLI.
+
+**List recent workflows:**
+
+```bash
+temporal workflow list --namespace default --output json
+```
+
+This command shows all recent workflow executions. Look for your workflow ID (e.g., `hello-activity-workflow-CodeAgent`) and confirm its status is `WORKFLOW_EXECUTION_STATUS_COMPLETED`.
+
+**Show specific workflow history:**
+
+```bash
+# Replace the workflow ID with the one from your run
+temporal workflow show --workflow-id "hello-activity-workflow-CodeAgent"
+```
+
+This command provides a detailed event history for the specified workflow, confirming that all steps (e.g., `ActivityTaskCompleted`) executed as expected.
+
+### 4.5 (If applicable to the use case) Send a Signal, Then Verify
 
 To make signaling testable, add a signal to your workflow (see §6). Once added, either:
 
@@ -169,7 +190,7 @@ To make signaling testable, add a signal to your workflow (see §6). Once added,
 
 Then **query** or run another execution to verify the changed behavior (see §6 for a query example).
 
-### 4.5 Cleanly Stop the Worker
+### 4.6 Cleanly Stop the Worker
 
 ```bash
 kill $(cat worker.pid)
@@ -177,7 +198,7 @@ wait $(cat worker.pid) 2>/dev/null || true
 rm -f worker.pid
 ```
 
-> **Success criteria:** server reachable, worker stayed alive and polled, starter completed, optional signal processed, worker shut down cleanly.
+> **Success criteria:** server reachable, worker stayed alive and polled, starter completed, CLI validation passed, optional signal processed, worker shut down cleanly.
 
 ---
 
@@ -188,7 +209,7 @@ rm -f worker.pid
 set -euo pipefail
 cd <your_app_name_here> # or your app name
 
-if ! curl -fsS http://localhost:7233 >/dev/null; then
+if ! temporal operator namespace describe default >/dev/null 2>&1; then
   echo "Starting Temporal dev server..."
   temporal server start-dev &
   sleep 5
@@ -202,6 +223,18 @@ ps -p $WORKER_PID >/dev/null || { echo "Worker failed to start"; tail -n 200 wor
 
 echo "Running starter..."
 uv run starter.py "CodeAgent"
+
+echo "Validating workflow execution..."
+# Give the server a moment to register the completion
+sleep 2
+temporal workflow show --workflow-id "hello-activity-workflow-CodeAgent"
+# Check for completion status in the list view
+if ! temporal workflow list --query "WorkflowId = 'hello-activity-workflow-CodeAgent'" | grep -q "COMPLETED"; then
+    echo "Validation failed: Workflow did not complete successfully."
+    temporal workflow show --workflow-id "hello-activity-workflow-CodeAgent" --output json | tail -n 200
+    exit 1
+fi
+echo "Validation successful."
 
 # Optional signal block (requires §6 changes to workflow)
 # python - <<'PY'
