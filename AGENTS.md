@@ -479,10 +479,11 @@ PY
 ## 8) Troubleshooting Quick Hits
 
 * **Worker won’t connect:** ensure dev server at `localhost:7233` is up.
-* **Hangs:** add timeouts; check `worker.log`; confirm PID is alive and polling.
+* **Workflow Hangs:** check `worker.log`; confirm PID is alive and polling. List workflows using the Temporal CLI to be sure it's still running, and get the event history (`temporal workflow show...`) to see what may be going wrong. NOTE: By default, a non-Temporal exception in a Python Workflow (e.g. a bug) fails the “workflow task” and suspends the Workflow in a retrying state. It keeps retrying until you deploy a code fix; it does not mark the Workflow Execution as failed. This behavior is intended to let you fix bad code (e.g., NPE, type errors) without losing in-flight workflows (SDK Python README – Exceptions). Identify and fix the offending code, then redeploy/restart the Worker; the Workflow will resume from its last progress point once the task is retried with the corrected code.
 * **Dependency woes:** `uv pip check`, `uv sync --reinstall`, `uv lock --upgrade`.
 * **CI:** use `uv sync --frozen` for reproducible installs; cache UV downloads.
 * **Unclear how to use SDK features or best practices** check out https://github.com/temporalio/samples-python.git and examine
+* **You want to intentionally fail the workflow (e.g. a business specific exception)**: Raise a Temporal failure, typically ApplicationError. Any exception that is an instance of temporalio.exceptions.FailureError (e.g., ApplicationError) fails the Workflow Execution immediately. Non-Temporal exceptions (e.g. unexpected bugs) suspend instead of failing.
 
 ---
 
