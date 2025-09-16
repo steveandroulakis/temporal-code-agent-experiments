@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+order_fulfillment/.venv/
+order_fulfillment/worker.pid

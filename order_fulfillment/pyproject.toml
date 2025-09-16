@@ -1,0 +1,16 @@
+[project]
+name = "order-fulfillment"
+version = "0.1.0"
+description = "Temporal order fulfillment sample implemented in Python"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "temporalio>=1.17.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.1",
+    "pytest>=8.4.2",
+    "ruff>=0.13.0",
+]
