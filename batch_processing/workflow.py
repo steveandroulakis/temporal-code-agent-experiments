@@ -57,7 +57,8 @@ class BatchProcessingWorkflow:
             task = workflow.execute_activity(
                 square_number,
                 SquareNumberInput(number=number),
-                schedule_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(seconds=30),
+                # No schedule_to_start_timeout - activities can wait in queue indefinitely
                 retry_policy=default_retry_policy,
             )
             tasks.append(task)

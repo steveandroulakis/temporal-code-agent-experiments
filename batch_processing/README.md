@@ -183,3 +183,43 @@ All children at each level execute **in parallel**, making the workflow highly e
 - **Event history management**: Each workflow has minimal events (StartChildWorkflow or ActivityTask)
 - **Infinite scalability**: Can process millions or billions of items by increasing tree depth
 - **Parallel execution**: All operations at each level run concurrently
+- **Queue-tolerant activities**: Activities use `start_to_close_timeout` (not `schedule_to_close_timeout`), allowing them to wait indefinitely in the queue when workers are saturated
+- **High worker concurrency**: Worker configured with 100 concurrent activities and 50 concurrent workflow tasks for optimal throughput
+
+## Activity Timeout Configuration
+
+The workflow uses **queue-tolerant timeout settings** to prevent failures under high load:
+
+```python
+workflow.execute_activity(
+    square_number,
+    SquareNumberInput(number=number),
+    start_to_close_timeout=timedelta(seconds=30),  # Only times execution, not queue wait
+    # No schedule_to_start_timeout - activities wait indefinitely in queue
+    retry_policy=default_retry_policy,
+)
+```
+
+**Why this matters:**
+- `schedule_to_close_timeout` = ScheduleToStart + StartToClose (includes queue wait time)
+- `start_to_close_timeout` = Only the execution time after a worker picks up the task
+- By using `start_to_close_timeout` only, activities can wait in the queue as long as needed when workers are busy
+- This prevents cascading failures when the task queue is saturated
+
+## Worker Configuration
+
+The worker is configured for high throughput:
+
+```python
+Worker(
+    client,
+    task_queue="batch-processing-task-queue",
+    workflows=[BatchProcessingWorkflow],
+    activities=[square_number],
+    activity_executor=ThreadPoolExecutor(100),      # 100 threads for activities
+    max_concurrent_activities=100,                   # Handle 100 activities at once
+    max_concurrent_workflow_tasks=50,                # Handle 50 workflow tasks at once
+)
+```
+
+This configuration allows the worker to process hundreds of activities and workflow tasks concurrently, maximizing throughput for the nested tree structure.

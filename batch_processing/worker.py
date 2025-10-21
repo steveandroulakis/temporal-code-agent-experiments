@@ -34,10 +34,17 @@ async def main() -> None:
         task_queue="batch-processing-task-queue",
         workflows=[BatchProcessingWorkflow],
         activities=[square_number],
-        activity_executor=ThreadPoolExecutor(10),
-        max_concurrent_activities=20,
+        # Increase thread pool to handle more concurrent activities
+        activity_executor=ThreadPoolExecutor(100),
+        # Allow up to 100 concurrent activities (increased from 20)
+        max_concurrent_activities=100,
+        # Allow up to 50 concurrent workflow tasks (handles workflow executions)
+        max_concurrent_workflow_tasks=50,
     ):
-        logger.info("Worker ready — polling: batch-processing-task-queue")
+        logger.info(
+            "Worker ready — polling: batch-processing-task-queue "
+            "(max_activities=100, max_workflow_tasks=50)"
+        )
         try:
             while True:
                 await asyncio.sleep(1)
