@@ -15,7 +15,7 @@ async def main() -> None:
     logger = logging.getLogger(__name__)
 
     # Parse command line arguments
-    total_numbers = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
+    total_numbers = int(sys.argv[1]) if len(sys.argv) > 1 else 10000
     batch_size = int(sys.argv[2]) if len(sys.argv) > 2 else 10
     max_children = int(sys.argv[3]) if len(sys.argv) > 3 else 5
 

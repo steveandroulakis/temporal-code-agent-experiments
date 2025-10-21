@@ -4,7 +4,7 @@ A demonstration of Temporal's batch processing capabilities using Python SDK wit
 
 ## Overview
 
-This demo processes numbers 1 through n (configurable, default 2000) by squaring each number. The processing automatically creates a **tree of nested child workflows** to manage event history effectively, with configurable limits per workflow.
+This demo processes numbers 1 through n (configurable, default 10000) by squaring each number. The processing automatically creates a **tree of nested child workflows** to manage event history effectively, with configurable limits per workflow.
 
 ## Architecture - Infinite Nesting Tree
 
@@ -83,7 +83,7 @@ By limiting each workflow to spawn ≤ 5 children (configurable), we create a tr
 
 2. In another terminal, run the starter:
    ```bash
-   # Process 2000 numbers with default settings (batch_size=10, max_children=5)
+   # Process 10000 numbers with default settings (batch_size=10, max_children=5)
    uv run starter.py
 
    # Process 50 numbers
