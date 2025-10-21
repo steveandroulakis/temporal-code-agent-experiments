@@ -8,7 +8,7 @@ import logging
 import sys
 from temporalio.client import Client
 from workflow import BatchProcessingWorkflow
-from shared import BatchProcessingInput
+from shared import WorkflowNodeInput, ProcessingConfig
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
@@ -17,8 +17,12 @@ async def main() -> None:
     # Parse command line arguments
     total_numbers = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
     batch_size = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+    max_children = int(sys.argv[3]) if len(sys.argv) > 3 else 5
 
-    logger.info(f"Starting batch processing workflow for {total_numbers} numbers with batch size {batch_size}")
+    logger.info(
+        f"Starting batch processing workflow for {total_numbers} numbers "
+        f"(batch_size={batch_size}, max_children={max_children})"
+    )
 
     try:
         client = await Client.connect("localhost:7233")
@@ -26,27 +30,39 @@ async def main() -> None:
         logger.error(f"Failed to connect to Temporal server: {e}")
         raise SystemExit(1)
 
-    workflow_id = f"batch-processing-workflow-{total_numbers}"
+    workflow_id = f"batch-processing-{total_numbers}-b{batch_size}-c{max_children}"
+
+    # Create workflow input
+    workflow_input = WorkflowNodeInput(
+        start_number=1,
+        end_number=total_numbers,
+        config=ProcessingConfig(
+            batch_size=batch_size,
+            max_children=max_children
+        ),
+        depth=0
+    )
 
     try:
         logger.info(f"Executing workflow with ID: {workflow_id}")
         result = await client.execute_workflow(
             BatchProcessingWorkflow.run,
-            BatchProcessingInput(total_numbers=total_numbers, batch_size=batch_size),
+            workflow_input,
             id=workflow_id,
             task_queue="batch-processing-task-queue",
         )
 
-        print("\n" + "="*60)
+        print("\n" + "="*70)
         print("BATCH PROCESSING COMPLETE")
-        print("="*60)
-        print(f"Total numbers processed: {result['total_numbers_processed']}")
-        print(f"Total batches: {result['total_batches']}")
-        print(f"Batch size: {result['batch_size']}")
-        print(f"Sum of all squares: {result['sum_of_squares']}")
-        print(f"\nFirst 10 results: {result['first_10_results']}")
-        print(f"Last 10 results: {result['last_10_results']}")
-        print("="*60)
+        print("="*70)
+        print(f"Total numbers processed: {result.total_processed}")
+        print(f"Tree depth (max nesting level): {result.depth}")
+        print(f"Batch size (activities per leaf): {batch_size}")
+        print(f"Max children per workflow: {max_children}")
+        print(f"Sum of all squares: {sum(result.results)}")
+        print(f"\nFirst 10 results: {result.results[:10]}")
+        print(f"Last 10 results: {result.results[-10:]}")
+        print("="*70)
 
     except Exception as e:
         logger.error(f"Workflow execution failed: {e}")

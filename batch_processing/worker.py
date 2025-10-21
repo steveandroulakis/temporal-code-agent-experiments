@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from temporalio.client import Client
 from temporalio.worker import Worker
 from activities import square_number
-from workflow import BatchProcessingWorkflow, NumberBatchWorkflow
+from workflow import BatchProcessingWorkflow
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
@@ -32,7 +32,7 @@ async def main() -> None:
     async with Worker(
         client,
         task_queue="batch-processing-task-queue",
-        workflows=[BatchProcessingWorkflow, NumberBatchWorkflow],
+        workflows=[BatchProcessingWorkflow],
         activities=[square_number],
         activity_executor=ThreadPoolExecutor(10),
         max_concurrent_activities=20,

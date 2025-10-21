@@ -7,19 +7,22 @@ class SquareNumberInput:
     number: int
 
 @dataclass
-class BatchInput:
-    """Input for processing a batch of numbers"""
-    numbers: List[int]
-    batch_id: int
+class ProcessingConfig:
+    """Configuration for batch processing"""
+    batch_size: int = 10  # Numbers to process per leaf workflow
+    max_children: int = 5  # Maximum child workflows per parent
 
 @dataclass
-class BatchResult:
-    """Result from processing a batch of numbers"""
-    batch_id: int
+class WorkflowNodeInput:
+    """Input for a workflow node (can be main, intermediate, or leaf)"""
+    start_number: int  # Starting number (inclusive)
+    end_number: int    # Ending number (inclusive)
+    config: ProcessingConfig
+    depth: int = 0     # Tree depth (0 = root)
+
+@dataclass
+class NodeResult:
+    """Result from processing a workflow node"""
     results: List[int]
-
-@dataclass
-class BatchProcessingInput:
-    """Input for the main batch processing workflow"""
-    total_numbers: int
-    batch_size: int = 10
+    total_processed: int
+    depth: int

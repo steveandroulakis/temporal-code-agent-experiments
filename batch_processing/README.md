@@ -1,30 +1,64 @@
-# Temporal Python SDK - Batch Processing Demo
+# Temporal Python SDK - Batch Processing with Infinite Nesting
 
-A demonstration of Temporal's batch processing capabilities using Python SDK with child workflows and parallel activity execution.
+A demonstration of Temporal's batch processing capabilities using Python SDK with **recursive child workflows** and parallel activity execution. This implementation supports **infinite nesting** to process any number of items while staying within Temporal's limits.
 
 ## Overview
 
-This demo processes numbers 1 through n (configurable, default 2000) by squaring each number. The processing is divided into batches using child workflows to manage event history effectively.
+This demo processes numbers 1 through n (configurable, default 2000) by squaring each number. The processing automatically creates a **tree of nested child workflows** to manage event history effectively, with configurable limits per workflow.
 
-## Architecture
+## Architecture - Infinite Nesting Tree
 
-- **Main Workflow** (`BatchProcessingWorkflow`): Orchestrates the entire batch processing operation
-- **Child Workflows** (`NumberBatchWorkflow`): Each child workflow processes a batch of 10 numbers
-- **Activities** (`square_number`): Each activity squares a single number
+The demo uses a **recursive workflow pattern** where each workflow node can either:
+1. **Leaf Node**: Process ≤ `batch_size` numbers as activities (default: 10)
+2. **Intermediate Node**: Spawn ≤ `max_children` child workflows (default: 5)
+
+This creates a tree structure that can scale to **unlimited size**:
+
+```
+Root Workflow (depth 0)
+├─ Child c0 (depth 1)
+│  ├─ Child c0-c0 (depth 2)
+│  │  ├─ Child c0-c0-c0 (depth 3)
+│  │  │  ├─ Leaf c0-c0-c0-c0 (depth 4) → processes 4 activities
+│  │  │  ├─ Leaf c0-c0-c0-c1 (depth 4) → processes 4 activities
+│  │  │  └─ ... (up to 5 leaves)
+│  │  └─ ... (up to 5 intermediate nodes)
+│  └─ ... (up to 5 intermediate nodes)
+└─ ... (up to 5 children)
+```
+
+### Scalability
+
+With `max_children=5` and `batch_size=10`:
+- **1 level**: 1 × 10 = 10 numbers
+- **2 levels**: 5 × 10 = 50 numbers
+- **3 levels**: 5 × 5 × 10 = 250 numbers
+- **4 levels**: 5 × 5 × 5 × 10 = 1,250 numbers
+- **5 levels**: 5 × 5 × 5 × 5 × 10 = 6,250 numbers
+- **N levels**: 5^(N-1) × 10 numbers → **infinite scale**
+
+### Why Infinite Nesting?
+
+Temporal has limits per workflow execution:
+- Max 2,000 pending child workflows per parent
+- Max 51,200 events or 50 MB event history
+
+By limiting each workflow to spawn ≤ 5 children (configurable), we create a tree that **never hits these limits**, no matter how many items you need to process.
 
 ## Features
 
-- Configurable batch size (default: 10 numbers per batch)
-- Configurable total numbers to process (default: 2000)
-- Parallel processing of numbers within each batch
-- Event history management through child workflows
-- Comprehensive error handling with retry policies
+- **Infinite nesting**: Automatically creates tree depth based on workload
+- **Configurable limits**: Set `batch_size` (activities per leaf) and `max_children` (children per node)
+- **Automatic tree balancing**: Evenly distributes work across children
+- **Parallel execution**: All children and activities execute in parallel
+- **Event history management**: Each workflow stays well within Temporal limits
+- **Comprehensive error handling**: Retry policies on all activities
 
 ## Files
 
-- `shared.py` - Data classes and types
+- `shared.py` - Data classes (WorkflowNodeInput, ProcessingConfig, NodeResult)
 - `activities.py` - Activity definitions (square_number)
-- `workflow.py` - Workflow definitions (main and child workflows)
+- `workflow.py` - Recursive BatchProcessingWorkflow definition
 - `worker.py` - Worker process
 - `starter.py` - Workflow starter client
 
@@ -49,14 +83,17 @@ This demo processes numbers 1 through n (configurable, default 2000) by squaring
 
 2. In another terminal, run the starter:
    ```bash
-   # Process 2000 numbers (default)
+   # Process 2000 numbers with default settings (batch_size=10, max_children=5)
    uv run starter.py
 
-   # Process custom number of numbers
-   uv run starter.py 100
+   # Process 50 numbers
+   uv run starter.py 50
 
-   # Process with custom batch size
+   # Process 100 numbers with batch_size=20
    uv run starter.py 100 20
+
+   # Process 1000 numbers with batch_size=10, max_children=10
+   uv run starter.py 1000 10 10
    ```
 
 ### Viewing Results
@@ -64,33 +101,85 @@ This demo processes numbers 1 through n (configurable, default 2000) by squaring
 Use the Temporal CLI to view workflow execution:
 
 ```bash
-# List workflows
+# List all workflows
 temporal workflow list
 
 # Show specific workflow
-temporal workflow show --workflow-id "batch-processing-workflow-2000"
+temporal workflow show --workflow-id "batch-processing-2000-b10-c5"
+
+# See the tree structure
+temporal workflow list --query "WorkflowId STARTS_WITH 'batch-processing-2000-b10-c5'"
+
+# Show a leaf workflow (processes activities)
+temporal workflow show --workflow-id "batch-processing-2000-b10-c5-c0-c0-c0-c0"
 ```
 
 ## Example Output
 
+### Small Scale (n=50)
 ```
-============================================================
+======================================================================
 BATCH PROCESSING COMPLETE
-============================================================
+======================================================================
+Total numbers processed: 50
+Tree depth (max nesting level): 1
+Batch size (activities per leaf): 10
+Max children per workflow: 5
+Sum of all squares: 42925
+
+First 10 results: [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+Last 10 results: [1681, 1764, 1849, 1936, 2025, 2116, 2209, 2304, 2401, 2500]
+======================================================================
+```
+
+### Large Scale (n=2000)
+```
+======================================================================
+BATCH PROCESSING COMPLETE
+======================================================================
 Total numbers processed: 2000
-Total batches: 200
-Batch size: 10
+Tree depth (max nesting level): 4
+Batch size (activities per leaf): 10
+Max children per workflow: 5
 Sum of all squares: 2668667000
 
 First 10 results: [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
 Last 10 results: [3964081, 3968064, 3972049, 3976036, 3980025, 3984016, 3988009, 3992004, 3996001, 4000000]
-============================================================
+======================================================================
 ```
 
 ## Testing
 
 The demo has been tested with:
-- n=50 (5 child workflows, 50 activities)
-- n=2000 (200 child workflows, 2000 activities)
 
-All tests completed successfully with mathematically verified results.
+### Test 1: Small batch (n=50, max_children=5, batch_size=10)
+- **Tree depth**: 1 (root → 5 leaf workflows)
+- **Total workflows**: 6 (1 root + 5 leaves)
+- **Total activities**: 50
+- **Sum of squares**: 42,925 ✓
+
+### Test 2: Large scale (n=2000, max_children=5, batch_size=10)
+- **Tree depth**: 4 (5 levels of nesting)
+- **Total workflows**: 656 (1 root + intermediate nodes + leaf workflows)
+- **Total activities**: 2,000
+- **Sum of squares**: 2,668,667,000 ✓ (mathematically verified)
+
+## How It Works
+
+1. **Root workflow** receives request to process numbers 1-2000
+2. Since 2000 > batch_size (10), it **spawns 5 children**, each handling 400 numbers
+3. Each child (depth 1) receives 400 numbers. Since 400 > 10, it **spawns 5 children**, each handling 80 numbers
+4. Each child (depth 2) receives 80 numbers. Since 80 > 10, it **spawns 5 children**, each handling 16 numbers
+5. Each child (depth 3) receives 16 numbers. Since 16 > 10, it **spawns 5 children**, each handling 3-4 numbers
+6. Each child (depth 4) receives 3-4 numbers. Since 3-4 ≤ 10, it **processes them as activities** (leaf node)
+7. Results bubble back up the tree, aggregating at each level
+
+All children at each level execute **in parallel**, making the workflow highly efficient.
+
+## Key Insights
+
+- **No hardcoded limits**: The tree depth automatically adjusts based on `total_numbers`, `batch_size`, and `max_children`
+- **Stays within Temporal limits**: Each workflow spawns ≤ 5 children (well under the 2,000 limit)
+- **Event history management**: Each workflow has minimal events (StartChildWorkflow or ActivityTask)
+- **Infinite scalability**: Can process millions or billions of items by increasing tree depth
+- **Parallel execution**: All operations at each level run concurrently

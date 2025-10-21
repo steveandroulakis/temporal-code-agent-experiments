@@ -2,17 +2,46 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from activities import square_number
-from shared import SquareNumberInput, BatchInput, BatchResult, BatchProcessingInput
+from shared import SquareNumberInput, WorkflowNodeInput, NodeResult
 import asyncio
+import math
 
 @workflow.defn
-class NumberBatchWorkflow:
-    """Child workflow that processes a batch of numbers"""
+class BatchProcessingWorkflow:
+    """
+    Recursive workflow that processes numbers with automatic tree nesting.
+
+    Each workflow node can:
+    1. Process numbers directly as activities (if count <= batch_size)
+    2. Spawn child workflows (if count > batch_size)
+
+    Child workflows are limited to max_children per parent, creating a tree structure
+    that can scale infinitely.
+    """
 
     @workflow.run
-    async def run(self, batch_input: BatchInput) -> BatchResult:
+    async def run(self, input: WorkflowNodeInput) -> NodeResult:
+        total_numbers = input.end_number - input.start_number + 1
+
         workflow.logger.info(
-            f"Processing batch {batch_input.batch_id} with {len(batch_input.numbers)} numbers"
+            f"[Depth {input.depth}] Processing range [{input.start_number}..{input.end_number}] "
+            f"({total_numbers} numbers) - batch_size={input.config.batch_size}, "
+            f"max_children={input.config.max_children}"
+        )
+
+        # Base case: Small enough to process as activities
+        if total_numbers <= input.config.batch_size:
+            return await self._process_as_activities(input)
+
+        # Recursive case: Divide into child workflows
+        return await self._process_as_children(input)
+
+    async def _process_as_activities(self, input: WorkflowNodeInput) -> NodeResult:
+        """Process numbers directly as activities (leaf node)"""
+        total_numbers = input.end_number - input.start_number + 1
+
+        workflow.logger.info(
+            f"[Depth {input.depth}] LEAF NODE: Processing {total_numbers} activities"
         )
 
         default_retry_policy = RetryPolicy(
@@ -22,9 +51,9 @@ class NumberBatchWorkflow:
             maximum_attempts=3,
         )
 
-        # Process all numbers in this batch in parallel
+        # Create activity tasks for each number in parallel
         tasks = []
-        for number in batch_input.numbers:
+        for number in range(input.start_number, input.end_number + 1):
             task = workflow.execute_activity(
                 square_number,
                 SquareNumberInput(number=number),
@@ -37,70 +66,80 @@ class NumberBatchWorkflow:
         results = await asyncio.gather(*tasks)
 
         workflow.logger.info(
-            f"Batch {batch_input.batch_id} completed with {len(results)} results"
+            f"[Depth {input.depth}] LEAF COMPLETE: Processed {len(results)} numbers"
         )
 
-        return BatchResult(
-            batch_id=batch_input.batch_id,
-            results=list(results)
+        return NodeResult(
+            results=list(results),
+            total_processed=len(results),
+            depth=input.depth
         )
 
+    async def _process_as_children(self, input: WorkflowNodeInput) -> NodeResult:
+        """Divide work into child workflows (intermediate node)"""
+        total_numbers = input.end_number - input.start_number + 1
 
-@workflow.defn
-class BatchProcessingWorkflow:
-    """Main workflow that orchestrates batch processing using child workflows"""
+        # Calculate how many child workflows we need
+        # Each child can handle at most: max_children^(remaining_depth) * batch_size numbers
+        # But we want to distribute evenly across max_children
+        num_children = min(input.config.max_children, total_numbers)
+        numbers_per_child = math.ceil(total_numbers / num_children)
 
-    @workflow.run
-    async def run(self, input: BatchProcessingInput) -> dict:
         workflow.logger.info(
-            f"Starting batch processing for {input.total_numbers} numbers "
-            f"with batch size {input.batch_size}"
+            f"[Depth {input.depth}] INTERMEDIATE NODE: Spawning {num_children} children "
+            f"({numbers_per_child} numbers each)"
         )
 
-        # Generate all numbers from 1 to n
-        all_numbers = list(range(1, input.total_numbers + 1))
+        # Create child workflow inputs
+        child_tasks = []
+        current_start = input.start_number
+        child_id = 0
 
-        # Divide numbers into batches
-        batches = []
-        for i in range(0, len(all_numbers), input.batch_size):
-            batch_numbers = all_numbers[i:i + input.batch_size]
-            batch_id = i // input.batch_size
-            batches.append(BatchInput(numbers=batch_numbers, batch_id=batch_id))
+        for i in range(num_children):
+            current_end = min(current_start + numbers_per_child - 1, input.end_number)
 
-        workflow.logger.info(f"Created {len(batches)} batches to process")
+            if current_start > input.end_number:
+                break
 
-        # Execute child workflows for each batch
-        child_workflow_tasks = []
-        for batch in batches:
+            child_input = WorkflowNodeInput(
+                start_number=current_start,
+                end_number=current_end,
+                config=input.config,
+                depth=input.depth + 1
+            )
+
             # Execute child workflow
             child_task = workflow.execute_child_workflow(
-                NumberBatchWorkflow.run,
-                batch,
-                id=f"batch-{workflow.info().workflow_id}-{batch.batch_id}",
+                BatchProcessingWorkflow.run,
+                child_input,
+                id=f"{workflow.info().workflow_id}-c{child_id}",
                 task_queue="batch-processing-task-queue",
             )
-            child_workflow_tasks.append(child_task)
+            child_tasks.append(child_task)
+
+            current_start = current_end + 1
+            child_id += 1
 
         # Wait for all child workflows to complete
-        batch_results = await asyncio.gather(*child_workflow_tasks)
+        child_results = await asyncio.gather(*child_tasks)
 
-        # Aggregate results
+        # Aggregate results from all children
         all_results = []
-        for batch_result in batch_results:
-            all_results.extend(batch_result.results)
+        total_processed = 0
+        max_depth = input.depth
+
+        for child_result in child_results:
+            all_results.extend(child_result.results)
+            total_processed += child_result.total_processed
+            max_depth = max(max_depth, child_result.depth)
 
         workflow.logger.info(
-            f"Batch processing complete. Processed {len(all_results)} numbers"
+            f"[Depth {input.depth}] INTERMEDIATE COMPLETE: "
+            f"Aggregated {total_processed} numbers from {len(child_tasks)} children"
         )
 
-        # Calculate some summary statistics
-        total_sum = sum(all_results)
-
-        return {
-            "total_numbers_processed": len(all_results),
-            "total_batches": len(batches),
-            "batch_size": input.batch_size,
-            "sum_of_squares": total_sum,
-            "first_10_results": all_results[:10],
-            "last_10_results": all_results[-10:],
-        }
+        return NodeResult(
+            results=all_results,
+            total_processed=total_processed,
+            depth=max_depth
+        )
